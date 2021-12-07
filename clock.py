@@ -6,7 +6,8 @@ from time import sleep
 from mpi4py import MPI
 
 comm = MPI.COMM_WORLD
-
+MIN_DELAY = 0
+MAX_DELAY = 10
 
 class LamportClock:
   def __init__(self, rank, size):
@@ -15,26 +16,22 @@ class LamportClock:
     self.clock = 0
     
   def receive(self):
-    req = comm.irecv(source=MPI.ANY_SOURCE)
-    timestamp = req.wait()
-    new_clock = max(self.clock, timestamp)
-    self.clock = new_clock + 1
-    print("Nó " + str(self.rank) + " atualizou seu clock para " + str(self.clock) + ".")
+    timestamp = comm.recv(source=MPI.ANY_SOURCE, tag=42)
+    if timestamp + 1 > self.clock:
+      self.clock = timestamp + 1
+      print("Nó " + str(self.rank) + " atualizou seu clock para " + str(self.clock))
+    else:
+      self.clock = self.clock
+      print("Nó " + str(self.rank) + " manteve seu clock " + str(self.clock))
 
-  def broadcast(self):
+  def event(self):
     self.clock += 1
-    for r in range(self.size):
-      if r == self.rank: continue
-      req = comm.isend(self.clock, dest=r)
-      req.wait()
-    #comm.bcast(self.clock, root=self.rank)
-    print("Nó " + str(self.rank) + " fez um broadcast com o clock " + str(self.clock) + ".")
+    print("Nó " + str(self.rank) + " enviou uma mensagem com o clock " + str(self.clock))
+    sleep(0.1)
+    comm.send(self.clock, dest=0, tag=42)
 
 
 if __name__ == '__main__':
-  MIN_DELAY = 2
-  MAX_DELAY = 10
-
   clock = LamportClock(
     comm.Get_rank(),
     comm.Get_size()
@@ -42,11 +39,12 @@ if __name__ == '__main__':
 
   print("Nó " + str(clock.rank) + " inicializado.")
   comm.Barrier()
-  print("Nó " + str(clock.rank) + " Passou pela barreira.")
-
-  while (True):
-    delay = randrange(MIN_DELAY, MAX_DELAY)
-    print("Delay do nó " + str(clock.rank) + ": " + str(delay))
-    sleep(delay)
-    clock.broadcast()
-    clock.receive()
+  
+  while True:
+    if clock.rank == 0:
+      clock.receive()
+    else:
+      delay = randrange(MIN_DELAY, MAX_DELAY)
+      print("Delay do nó " + str(clock.rank) + ": " + str(delay))
+      sleep(delay)
+      clock.event()
