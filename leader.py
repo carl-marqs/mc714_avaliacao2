@@ -1,3 +1,4 @@
+# Fontes Utilizadas
 # https://en.wikipedia.org/wiki/Leader_election
 
 from random import randint
